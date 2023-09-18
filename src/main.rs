@@ -21,6 +21,7 @@ async fn main() -> io::Result<()> {
             .service(routes::signout)
             .service(routes::validate)
             .service(routes::get_name)
+            .service(routes::get_chats)
     })
     .bind(("127.0.0.1", 8080))?
         .run()

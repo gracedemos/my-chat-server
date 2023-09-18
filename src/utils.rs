@@ -6,12 +6,14 @@ use sqlx::{Pool, MySql, Row};
 
 #[derive(Serialize, Deserialize)]
 pub struct Message {
+    pub to_name: String,
     pub msg: String
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
 pub struct SQLMessage {
-    pub name: String,
+    pub from_name: String,
+    pub to_name: String,
     pub msg: String
 }
 
@@ -19,6 +21,11 @@ pub struct SQLMessage {
 pub struct Account {
     pub name: String,
     pub password: String
+}
+
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
+pub struct ToName {
+    pub to_name: String
 }
 
 pub struct AppData {

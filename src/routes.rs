@@ -7,15 +7,26 @@ use sqlx::Row;
 
 use crate::utils::{self, *};
 
-#[get("/msg")]
-async fn get_msg(data: web::Data<AppData>, request: HttpRequest) -> impl Responder {
+#[post("/msg")]
+async fn get_msg(data: web::Data<AppData>, to_name: web::Json<ToName>, request: HttpRequest) -> impl Responder {
     let session = request.cookie("session");
     if !utils::validate(&data.pool, &session).await {
         return HttpResponse::NotFound()
             .body("");
     }
 
-    let messages: Vec<SQLMessage> = sqlx::query_as::<_, SQLMessage>("select * from messages")
+    let from_name = utils::get_name(&data.pool, &session)
+        .await;
+    if let Err(_) = from_name {
+        return HttpResponse::NotFound()
+            .body("")
+    }
+
+    let messages: Vec<SQLMessage> = sqlx::query_as::<_, SQLMessage>("select * from messages where (from_name = ? and to_name = ?) or (from_name = ? and to_name = ?)")
+        .bind(&to_name.to_name)
+        .bind(from_name.as_ref().unwrap())
+        .bind(from_name.as_ref().unwrap())
+        .bind(&to_name.to_name)
         .fetch_all(&data.pool)
         .await
         .unwrap();
@@ -24,7 +35,7 @@ async fn get_msg(data: web::Data<AppData>, request: HttpRequest) -> impl Respond
         .json(messages)
 }
 
-#[post("/msg")]
+#[post("/add-msg")]
 async fn add_msg(data: web::Data<AppData>, message: web::Json<Message>, request: HttpRequest) -> impl Responder {
     let session = request.cookie("session");
     let name = utils::get_name(&data.pool, &session)
@@ -35,14 +46,35 @@ async fn add_msg(data: web::Data<AppData>, message: web::Json<Message>, request:
         _ => ()
     }
 
-    let _ = sqlx::query("insert into messages values (?, ?)")
+    let _ = sqlx::query("insert into messages values (?, ?, ?)")
         .bind(name.unwrap())
+        .bind(&message.to_name)
         .bind(&message.msg)
         .execute(&data.pool)
         .await;
 
     HttpResponse::Ok()
         .body("Message added")
+}
+
+#[get("/get-chats")]
+async fn get_chats(data: web::Data<AppData>, request: HttpRequest) -> impl Responder {
+    let session = request.cookie("session");
+    let name = utils::get_name(&data.pool, &session)
+        .await;
+    if let Err(_) = name {
+        return HttpResponse::NotFound()
+            .body("")
+    }
+
+    let chats: Vec<ToName> = sqlx::query_as::<_, ToName>("select to_name from chats where from_name = ?")
+        .bind(name.unwrap())
+        .fetch_all(&data.pool)
+        .await
+        .unwrap();
+
+    HttpResponse::Ok()
+        .json(chats)
 }
 
 #[post("/login")]
