@@ -3,7 +3,9 @@ use actix_web::cookie;
 
 use sha2::{Sha256, Digest};
 
-use sqlx::Row;
+use sqlx::{query, Row};
+
+use futures::join;
 
 use crate::utils::{self, *};
 
@@ -46,6 +48,11 @@ async fn add_msg(data: web::Data<AppData>, message: web::Json<Message>, request:
         _ => ()
     }
 
+    if message.to_name == "" {
+        return HttpResponse::NotFound()
+            .body("")
+    }
+
     let _ = sqlx::query("insert into messages values (?, ?, ?)")
         .bind(name.unwrap())
         .bind(&message.to_name)
@@ -75,6 +82,46 @@ async fn get_chats(data: web::Data<AppData>, request: HttpRequest) -> impl Respo
 
     HttpResponse::Ok()
         .json(chats)
+}
+
+#[post("/add-chat")]
+async fn add_chat(data: web::Data<AppData>, chat: web::Json<ToName>, request: HttpRequest) -> impl Responder {
+    let session = request.cookie("session");
+    let name = utils::get_name(&data.pool, &session)
+        .await;
+    if let Err(_) = name {
+        return HttpResponse::NotFound()
+            .body("")
+    }
+
+    if chat.to_name.is_empty() {
+        return HttpResponse::NotFound()
+            .body("")
+    }
+
+    let query_chat = sqlx::query_as::<_, Chat>("select * from chats where from_name = ? and to_name = ?")
+        .bind(name.as_ref().unwrap())
+        .bind(&chat.to_name)
+        .fetch_one(&data.pool)
+        .await;
+
+    if let Ok(_) = query_chat {
+        return HttpResponse::NotFound()
+            .body("")
+    }
+
+    let query_1 = sqlx::query("insert into chats values (?, ?)")
+        .bind(name.as_ref().unwrap())
+        .bind(&chat.to_name)
+        .execute(&data.pool);
+    let query_2 = sqlx::query("insert into chats values (?, ?)")
+        .bind(&chat.to_name)
+        .bind(name.as_ref().unwrap())
+        .execute(&data.pool);
+    let _ = join!(query_1, query_2);
+
+    HttpResponse::Ok()
+        .body("")
 }
 
 #[post("/login")]
@@ -147,6 +194,26 @@ async fn signout(data: web::Data<AppData>, request: HttpRequest) -> impl Respond
 
     HttpResponse::Ok()
         .body("")
+}
+
+#[get("/get-users")]
+async fn get_users(data: web::Data<AppData>, request: HttpRequest) -> impl Responder {
+    let session = request.cookie("session");
+    let name = utils::get_name(&data.pool, &session)
+        .await;
+    if let Err(_) = name {
+        return HttpResponse::NotFound()
+            .body("");
+    }
+
+    let users = sqlx::query_as::<_, User>("select name from users where not name = ?")
+        .bind(name.unwrap())
+        .fetch_all(&data.pool)
+        .await
+        .unwrap();
+
+    HttpResponse::Ok()
+        .json(users)
 }
 
 #[get("/validate")]

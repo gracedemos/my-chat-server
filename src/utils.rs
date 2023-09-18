@@ -28,6 +28,17 @@ pub struct ToName {
     pub to_name: String
 }
 
+#[derive(Serialize, Deserialize, sqlx::FromRow)]
+pub struct User {
+    pub name: String
+}
+
+#[derive(sqlx::FromRow)]
+pub struct Chat {
+    pub from_name: String,
+    pub to_name: String
+}
+
 pub struct AppData {
     pub pool: Pool<MySql>
 }
